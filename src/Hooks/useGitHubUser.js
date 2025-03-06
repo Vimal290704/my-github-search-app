@@ -6,7 +6,6 @@ const useGitHubData = (username, detailType) => {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    console.log(username, detailType);
     if (!username) {
       setData(null);
       setError(null);
@@ -14,16 +13,29 @@ const useGitHubData = (username, detailType) => {
       return;
     }
 
+    const cacheKey = `${username}_${detailType}`;
+    const cachedData = localStorage.getItem(cacheKey);
+    if (cachedData) {
+      setData(JSON.parse(cachedData));
+      return;
+    }
+
     setLoading(true);
     setError(null);
     setData(null);
+
     let endpoint = `https://api.github.com/users/${username}`;
     if (detailType !== "overview") {
       endpoint += `/${detailType}`;
     }
+
+    const abortController = new AbortController();
+
     const fetchData = async () => {
       try {
-        const response = await fetch(endpoint);
+        const response = await fetch(endpoint, {
+          signal: abortController.signal,
+        });
         if (!response.ok) {
           setError(`Error: ${response.status} - ${response.statusText}`);
           setLoading(false);
@@ -31,14 +43,20 @@ const useGitHubData = (username, detailType) => {
         }
         const json = await response.json();
         setData(json);
+        localStorage.setItem(cacheKey, JSON.stringify(json));
       } catch (err) {
-        setError(err.message);
+        if (err.name !== "AbortError") {
+          setError(err.message);
+        }
       } finally {
         setLoading(false);
       }
     };
 
     fetchData();
+    return () => {
+      abortController.abort();
+    };
   }, [username, detailType]);
 
   return { data, error, loading };
